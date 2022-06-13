@@ -11,6 +11,9 @@ use nanos_sdk::bindings::*;
 use nanos_sdk::io::SyscallError;
 use zeroize::{DefaultIsZeroes, Zeroizing};
 
+pub mod hasher;
+use crate::hasher::*;
+
 /// Helper function that derives the seed over Ed25519
 pub fn bip32_derive_eddsa(path: &[u32]) -> Result<[u8; 64], SyscallError> {
     // Note: os_perso_derive_node_bip32 appears to write 64 bytes for CX_CURVE_Ed25519, despite the
@@ -193,50 +196,6 @@ impl fmt::Display for HexSlice<'_> {
     }
 }
 
-#[derive(Clone)]
-pub struct Hasher(cx_sha256_s);
-
-impl Hasher {
-    pub fn new() -> Hasher {
-        let mut rv = cx_sha256_s::default();
-        unsafe { cx_sha256_init_no_throw(&mut rv) };
-        Self(rv)
-    }
-
-    pub fn update(&mut self, bytes: &[u8]) {
-        unsafe {
-            // info!("HASHING (Protocol): {}\n{:?}", HexSlice(bytes), core::str::from_utf8(bytes));
-            cx_hash_update(
-                &mut self.0 as *mut cx_sha256_s as *mut cx_hash_t,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-            );
-        }
-    }
-
-    pub fn finalize(&mut self) -> Hash {
-        let mut rv = <[u8; 32]>::default();
-        unsafe {
-            cx_hash_final(
-                &mut self.0 as *mut cx_sha256_s as *mut cx_hash_t,
-                rv.as_mut_ptr(),
-            )
-        };
-        Hash(rv)
-    }
-}
-
-pub struct Hash(pub [u8; 32]);
-
-impl fmt::Display for Hash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
-    }
-}
-
 extern "C" {
   pub fn cx_ecfp_decode_sig_der(input: *const u8, input_len: size_t,
       max_size: size_t,
@@ -245,44 +204,6 @@ extern "C" {
       ) -> u32;
 }
 
-
-#[derive(Clone, Copy)]
-pub struct SHA512(cx_sha512_s);
-
-impl SHA512 {
-    pub fn new() -> SHA512 {
-        let mut rv = cx_sha512_s::default();
-        unsafe { cx_sha512_init_no_throw(&mut rv) };
-        Self(rv)
-    }
-
-    pub fn clear(&mut self) {
-        trace!("Clearing Hasher");
-        unsafe { cx_sha512_init_no_throw(&mut self.0) };
-    }
-
-    pub fn update(&mut self, bytes: &[u8]) {
-        unsafe {
-            info!("HASHING: {}\n{:?}", HexSlice(bytes), core::str::from_utf8(bytes));
-            cx_hash_update(
-                &mut self.0 as *mut cx_sha512_s as *mut cx_hash_t,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-            );
-        }
-    }
-
-    pub fn finalize(&mut self) -> Zeroizing<[u8; 64]> {
-        let mut rv = Zeroizing::new([0; 64]);
-        unsafe {
-            cx_hash_final(
-                &mut self.0 as *mut cx_sha512_s as *mut cx_hash_t,
-                rv.as_mut_ptr(),
-            )
-        };
-        rv
-    }
-}
 
 struct BnLock;
 
@@ -305,7 +226,7 @@ impl Drop for BnLock {
 pub struct Ed25519 {
     hash: SHA512,
     path: ArrayVec<u32, 10>,
-    r_pre: Zeroizing<[u8; 64]>,
+    r_pre: Zeroizing<Hash<64>>,
     r: [u8; 32],
 }
 impl Default for Ed25519 {
@@ -313,7 +234,7 @@ impl Default for Ed25519 {
         Ed25519 {
             hash: SHA512::new(),
             path: ArrayVec::default(),
-            r_pre: Zeroizing::new([0; 64]),
+            r_pre: Zeroizing::new(Hash([0; 64])),
             r: [0; 32]
         }
     }
@@ -337,13 +258,13 @@ impl Ed25519 {
             self.hash.update(&key.d[0..(key.d_len as usize)]);
             let temp = self.hash.finalize();
             self.hash.clear();
-            self.hash.update(&temp[32..64]);
+            self.hash.update(&temp.0[32..64]);
             Ok(())
         }).ok()?;
 
         self.path = path.clone();
 
-        self.r_pre = Zeroizing::new([0; 64]);
+        self.r_pre = Zeroizing::new(Hash([0; 64]));
         self.r = [0; 32];
         Ok(())
     }
@@ -363,10 +284,10 @@ impl Ed25519 {
             // call_c_api_function!( cx_bn_lock(32,0) ).ok()?;
             trace!("ping");
             self.r_pre = self.hash.finalize();
-            self.r_pre.reverse();
+            self.r_pre.0.reverse();
 
             // Make r_pre into a BN
-            call_c_api_function!( cx_bn_alloc_init(&mut r as *mut cx_bn_t, 64, self.r_pre.as_ptr(), self.r_pre.len() as u32) ).ok()?;
+            call_c_api_function!( cx_bn_alloc_init(&mut r as *mut cx_bn_t, 64, self.r_pre.0.as_ptr(), self.r_pre.0.len() as u32) ).ok()?;
             trace!("ping");
 
             let mut ed_p = cx_ecpoint_t::default();
@@ -428,11 +349,11 @@ impl Ed25519 {
 
             let mut h_scalar = hash_ref.finalize();
 
-            h_scalar.reverse();
+            h_scalar.0.reverse();
 
             // Make k into a BN
             let mut h_scalar_bn = CX_BN_FLAG_UNSET;
-            call_c_api_function!( cx_bn_alloc_init(&mut h_scalar_bn as *mut cx_bn_t, 64, h_scalar.as_ptr(), h_scalar.len() as u32) ).ok()?;
+            call_c_api_function!( cx_bn_alloc_init(&mut h_scalar_bn as *mut cx_bn_t, 64, h_scalar.0.as_ptr(), h_scalar.0.len() as u32) ).ok()?;
 
             // Get the group order
             let mut ed25519_order = CX_BN_FLAG_UNSET;
@@ -446,11 +367,11 @@ impl Ed25519 {
             let mut temp : Zeroizing<_> = hash_ref.finalize();
 
             // Bit twiddling for ed25519
-            temp[0] &= 248;
-            temp[31] &= 63;
-            temp[31] |= 64;
+            temp.0[0] &= 248;
+            temp.0[31] &= 63;
+            temp.0[31] |= 64;
 
-            let key_slice = &mut temp[0..32];
+            let key_slice = &mut temp.0[0..32];
 
             key_slice.reverse();
             let mut key_bn = CX_BN_FLAG_UNSET;
@@ -472,7 +393,7 @@ impl Ed25519 {
 
         // Reload the r value into the bn area
         let mut r = CX_BN_FLAG_UNSET;
-        call_c_api_function!( cx_bn_alloc_init(&mut r as *mut cx_bn_t, 64, self.r_pre.as_ptr(), self.r_pre.len() as u32)).ok()?;
+        call_c_api_function!( cx_bn_alloc_init(&mut r as *mut cx_bn_t, 64, self.r_pre.0.as_ptr(), self.r_pre.0.len() as u32)).ok()?;
 
         // finally, compute s:
         let mut s = CX_BN_FLAG_UNSET;
