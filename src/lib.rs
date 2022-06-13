@@ -1,86 +1,8 @@
 #![no_std]
 #![feature(try_trait)]
 
-use core::default::Default;
-use core::fmt;
-use ledger_log::*;
-use nanos_sdk::bindings::*;
-use nanos_sdk::io::SyscallError;
-
+pub mod common;
 pub mod hasher;
 #[macro_use]
 mod internal;
-use crate::internal::*;
 pub mod ed25519;
-
-pub fn with_public_keys<A>(
-  path: &[u32],
-  f: impl FnOnce(&nanos_sdk::bindings::cx_ecfp_public_key_t, &PKH) -> Result<A, CryptographyError>
-) -> Result<A, CryptographyError> {
-    let mut pubkey = Default::default();
-    with_private_key(path, |ec_k| {
-        info!("Getting private key");
-        get_pubkey_from_privkey(ec_k, &mut pubkey).ok()?;
-        Ok(())
-    })?;
-    let pkh = get_pkh(&pubkey)?;
-    f(&pubkey, &pkh)
-}
-
-pub fn public_key_bytes(key: &nanos_sdk::bindings::cx_ecfp_public_key_t) -> &[u8] {
-    &key.W[1..33]
-}
-
-// Public Key Hash type; update this to match the target chain's notion of an address and how to
-// format one.
-
-pub struct PKH(pub [u8; 20]);
-
-#[allow(dead_code)]
-pub fn get_pkh(key: &nanos_sdk::bindings::cx_ecfp_public_key_t) -> Result<PKH, SyscallError> {
-    let mut public_key_hash = [0; 32];
-    let key_bytes = public_key_bytes(key);
-    unsafe {
-        let _len: size_t = cx_hash_sha256(
-            key_bytes.as_ptr(),
-            key_bytes.len() as u32,
-            public_key_hash.as_mut_ptr(),
-            public_key_hash.len() as u32,
-        );
-    }
-    let mut rv=PKH([0; 20]);
-    rv.0.clone_from_slice(&public_key_hash[0..20]);
-    Ok(rv)
-}
-
-impl fmt::Display for PKH {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "")?;
-        for byte in self.0 {
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-struct HexSlice<'a>(&'a [u8]);
-
-// You can choose to implement multiple traits, like Lower and UpperHex
-impl fmt::Display for HexSlice<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            // Decide if you want to pad the value or have spaces inbetween, etc.
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-extern "C" {
-  pub fn cx_ecfp_decode_sig_der(input: *const u8, input_len: size_t,
-      max_size: size_t,
-      r: *mut *const u8, r_len: *mut size_t,
-      s: *mut *const u8, s_len: *mut size_t,
-      ) -> u32;
-}
-
