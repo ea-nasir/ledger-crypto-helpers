@@ -60,6 +60,19 @@ impl fmt::Display for PKH {
     }
 }
 
+pub struct PubKey(cx_ecfp_public_key_t);
+
+impl Address<PubKey> for PubKey {
+    fn get_address(key: &nanos_sdk::bindings::cx_ecfp_public_key_t) -> Result<Self, SyscallError> {
+        Ok(PubKey(*key))
+    }
+}
+impl fmt::Display for PubKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", HexSlice(&self.0.W[1..self.0.W_len as usize]))
+    }
+}
+
 struct HexSlice<'a>(&'a [u8]);
 
 // You can choose to implement multiple traits, like Lower and UpperHex
