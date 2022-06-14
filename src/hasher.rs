@@ -97,3 +97,39 @@ impl Hasher<64> for SHA512 {
         rv
     }
 }
+
+#[derive(Clone)]
+pub struct Blake2b(cx_blake2b_s);
+
+impl Hasher<32> for Blake2b {
+    fn new() -> Self {
+        let mut rv = cx_blake2b_s::default();
+        unsafe { cx_blake2b_init_no_throw(&mut rv, 256) };
+        Self(rv)
+    }
+
+    fn clear(&mut self) {
+        unsafe { cx_blake2b_init_no_throw(&mut self.0, 256) };
+    }
+
+    fn update(&mut self, bytes: &[u8]) {
+        unsafe {
+            cx_hash_update(
+                &mut self.0 as *mut cx_blake2b_s as *mut cx_hash_t,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+            );
+        }
+    }
+
+    fn finalize(&mut self) -> Zeroizing<Hash<32>> {
+        let mut rv = Zeroizing::new(Hash([0; 32]));
+        unsafe {
+            cx_hash_final(
+                &mut self.0 as *mut cx_blake2b_s as *mut cx_hash_t,
+                rv.0.as_mut_ptr(),
+            )
+        };
+        rv
+    }
+}
