@@ -54,7 +54,7 @@ impl fmt::Display for PKH {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "")?;
         for byte in self.0 {
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{:02x}", byte)?;
         }
         Ok(())
     }
@@ -80,7 +80,7 @@ impl fmt::Display for HexSlice<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for byte in self.0 {
             // Decide if you want to pad the value or have spaces inbetween, etc.
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{:02x}", byte)?;
         }
         Ok(())
     }
