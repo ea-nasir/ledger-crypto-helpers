@@ -2,6 +2,7 @@ use core::default::Default;
 use core::fmt;
 use nanos_sdk::bindings::*;
 use zeroize::{Zeroize, Zeroizing};
+use base64;
 
 pub trait Hasher<const N: usize> {
     fn new() -> Self;
@@ -15,10 +16,7 @@ pub struct Hash<const N: usize>(pub [u8; N]);
 
 impl <const N: usize> fmt::Display for Hash<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
+        write!(f, "{}", base64::display::Base64Display::with_config(&self.0, base64::URL_SAFE_NO_PAD))
     }
 }
 
