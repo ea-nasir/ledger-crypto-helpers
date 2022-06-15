@@ -112,16 +112,3 @@ pub fn with_private_key<A>(
     info!("Key generated");
     f(ec_k.deref_mut().deref_mut())
 }
-
-pub fn with_public_keys<A>(
-    path: &[u32],
-    f: impl FnOnce(&nanos_sdk::bindings::cx_ecfp_public_key_t) -> Result<A, CryptographyError>
-) -> Result<A, CryptographyError> {
-    let mut pubkey = Default::default();
-    with_private_key(path, |ec_k| {
-        info!("Getting private key");
-        get_pubkey_from_privkey(ec_k, &mut pubkey).ok()?;
-        Ok(())
-    })?;
-    f(&pubkey)
-}

@@ -5,6 +5,7 @@ use nanos_sdk::bindings::*;
 use nanos_sdk::io::SyscallError;
 use zeroize::{Zeroizing};
 
+use crate::common::*;
 use crate::hasher::*;
 use crate::internal::*;
 
@@ -126,7 +127,7 @@ impl Ed25519 {
 
         let path_tmp = self.path.clone();
             trace!("ping");
-        with_public_keys(&path_tmp, |key| {
+        with_public_keys(&path_tmp, |key, _ : &PKH| {
             // Note: public key has a byte in front of it in W, from how the ledger's system call
             // works; it's not for ed25519.
             trace!("ping");
