@@ -10,7 +10,7 @@ pub trait Hasher<const N: usize> {
     fn clear(&mut self);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Hash<const N: usize>(pub [u8; N]);
 
 impl <const N: usize> fmt::Display for Hash<N> {
@@ -26,7 +26,7 @@ impl <const N: usize> Zeroize for Hash<N> {
     fn zeroize(&mut self) { self.0.zeroize(); }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct SHA256(cx_sha256_s);
 
 impl Hasher<32> for SHA256 {
@@ -98,7 +98,7 @@ impl Hasher<64> for SHA512 {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Blake2b(cx_blake2b_s);
 
 impl Hasher<32> for Blake2b {
