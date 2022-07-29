@@ -6,6 +6,10 @@ use nanos_sdk::io::SyscallError;
 
 use crate::internal::*;
 
+pub fn try_option<A>(q: Option<A>) -> Result<A, CryptographyError> {
+    q.ok_or(CryptographyError::NoneError)
+}
+
 pub fn with_public_keys<V, A:Address<A>>(
   path: &[u32],
   f: impl FnOnce(&nanos_sdk::bindings::cx_ecfp_public_key_t, &A) -> Result<V, CryptographyError>
@@ -13,7 +17,7 @@ pub fn with_public_keys<V, A:Address<A>>(
     let mut pubkey = Default::default();
     with_private_key(path, |ec_k| {
         info!("Getting private key");
-        get_pubkey_from_privkey(ec_k, &mut pubkey).ok()?;
+        get_pubkey_from_privkey(ec_k, &mut pubkey)?;
         Ok(())
     })?;
     let pkh = <A as Address<A>>::get_address(&pubkey)?;
